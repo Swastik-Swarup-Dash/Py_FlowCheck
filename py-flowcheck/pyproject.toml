@@ -1,0 +1,28 @@
+[tool]
+name = "py-flowcheck"
+version = "0.1.0"
+description = "A lightweight runtime contract validation library for Python backends and data pipelines."
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT"  # or "Apache-2.0"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+dependencies = [
+    "fastapi",
+    "flask",
+    "celery",
+    "pydantic",
+    "pytest",
+    "ruff",
+    "mypy"
+]
+python-versions = ">=3.9,<3.14"
+
+[tool.hatch.metadata]
+dynamic = ["version"]
+
+[tool.hatch.build]
+include = ["src/**", "README.md", "CHANGELOG.md", "LICENSE"]
