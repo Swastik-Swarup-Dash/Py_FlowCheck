@@ -1,4 +1,6 @@
-from py_flowcheck import Schema, check_input
+from py_flowcheck import Schema, check_input, ValidationError
+import pytest
+
 
 # Define a sample schema for testing
 user_schema = Schema({
@@ -13,8 +15,7 @@ def test_schema_validation_valid():
         "email": "test@example.com",
         "age": 30
     }
-    violations = user_schema.validate(valid_data)
-    assert not violations, f"Expected no violations, but got: {violations}"
+    user_schema.validate(valid_data)
 
 def test_schema_validation_invalid_email():
     invalid_data = {
@@ -22,16 +23,16 @@ def test_schema_validation_invalid_email():
         "email": "invalid-email",
         "age": 30
     }
-    violations = user_schema.validate(invalid_data)
-    assert violations, "Expected violations for invalid email"
+    with pytest.raises(ValidationError, match="Schema validation failed"):
+        user_schema.validate(invalid_data)
 
 def test_schema_validation_missing_required_field():
     invalid_data = {
         "email": "test@example.com",
         "age": 30
     }
-    violations = user_schema.validate(invalid_data)
-    assert violations, "Expected violations for missing required field 'id'"
+    with pytest.raises(ValidationError, match="Schema validation failed"):
+        user_schema.validate(invalid_data)
 
 def test_schema_validation_nullable_field():
     valid_data = {
@@ -39,8 +40,7 @@ def test_schema_validation_nullable_field():
         "email": "test@example.com",
         "age": None
     }
-    violations = user_schema.validate(valid_data)
-    assert not violations, f"Expected no violations, but got: {violations}"
+    user_schema.validate(valid_data)
 
 def test_schema_validation_invalid_age():
     invalid_data = {
@@ -48,5 +48,5 @@ def test_schema_validation_invalid_age():
         "email": "test@example.com",
         "age": -1
     }
-    violations = user_schema.validate(invalid_data)
-    assert violations, "Expected violations for invalid age"
+    with pytest.raises(ValidationError, match="Schema validation failed"):
+        user_schema.validate(invalid_data)
