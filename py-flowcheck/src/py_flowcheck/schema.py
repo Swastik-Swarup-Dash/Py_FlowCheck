@@ -20,15 +20,7 @@ class Schema:
         user_schema = Schema({
             "id": int,
             "email": {"type": str, "regex": r".+@.+\..+"},
-            "age": {"type": int, "nullable": True, "min": 0, "max": 120},
-            "tags": {"type": list, "items": str},
-            "profile": {
-                "type": dict,
-                "schema": {
-                    "name": str,
-                    "bio": {"type": str, "max_length": 500}
-                }
-            }
+            "age": {"type": int, "nullable": True, "min": 0},
         })
     """
 
@@ -50,23 +42,21 @@ class Schema:
         """
         return Schema(defn)
 
-    def validate(self, data: Dict[str, Any], path: str = "") -> None:
+    def validate(self, data: Dict[str, Any]) -> None:
         """
         Validates the given data against the schema.
 
         :param data: The data to validate.
-        :param path: Current path in nested validation.
         :raises ValidationError: If validation fails.
         """
         violations = []
-        
+
         for field, rule in self.schema.items():
-            field_path = f"{path}.{field}" if path else field
             value = data.get(field)
 
             # Check for missing required fields
             if value is None and not (isinstance(rule, dict) and rule.get("nullable")):
-                violations.append(f"Field '{field_path}' is required but missing")
+                violations.append(f"Field '{field}' is required but missing")
                 continue
 
             # Handle nullable fields
@@ -76,88 +66,21 @@ class Schema:
             # Type validation
             expected_type = rule if isinstance(rule, type) else rule.get("type")
             if expected_type and not isinstance(value, expected_type):
-                violations.append(f"Field '{field_path}' must be of type {expected_type.__name__}, got {type(value).__name__}")
+                violations.append(f"Field '{field}' must be of type {expected_type.__name__}, got {type(value).__name__}")
                 continue
 
-            # Additional validations for dict rules
-            if isinstance(rule, dict):
-                violations.extend(self._validate_field(value, rule, field_path))
+            # Regex validation
+            if isinstance(rule, dict) and "regex" in rule:
+                if not re.match(rule["regex"], str(value)):
+                    violations.append(f"Field '{field}' does not match the required pattern")
+
+            # Min value validation
+            if isinstance(rule, dict) and "min" in rule:
+                if value < rule["min"]:
+                    violations.append(f"Field '{field}' must be at least {rule['min']}")
 
         if violations:
             raise ValidationError("Schema validation failed", violations)
-
-    def _validate_field(self, value: Any, rule: Dict[str, Any], field_path: str) -> List[str]:
-        """
-        Validate a single field with its rule.
-        """
-        violations = []
-
-        # Regex validation
-        if "regex" in rule and value is not None:
-            if not re.match(rule["regex"], str(value)):
-                violations.append(f"Field '{field_path}' does not match the required pattern")
-
-        # Enum validation
-        if "enum" in rule and value is not None:
-            if value not in rule["enum"]:
-                violations.append(f"Field '{field_path}' must be one of {rule['enum']}, got '{value}'")
-
-        # Min/Max value validation
-        if "min" in rule and value is not None:
-            if value < rule["min"]:
-                violations.append(f"Field '{field_path}' must be at least {rule['min']}")
-        
-        if "max" in rule and value is not None:
-            if value > rule["max"]:
-                violations.append(f"Field '{field_path}' must be at most {rule['max']}")
-
-        # String length validation
-        if "min_length" in rule and isinstance(value, str):
-            if len(value) < rule["min_length"]:
-                violations.append(f"Field '{field_path}' must be at least {rule['min_length']} characters")
-        
-        if "max_length" in rule and isinstance(value, str):
-            if len(value) > rule["max_length"]:
-                violations.append(f"Field '{field_path}' must be at most {rule['max_length']} characters")
-
-        # List validation
-        if rule.get("type") == list and "items" in rule and isinstance(value, list):
-            item_rule = rule["items"]
-            for i, item in enumerate(value):
-                if isinstance(item_rule, type):
-                    # Simple type validation
-                    if not isinstance(item, item_rule):
-                        violations.append(f"Field '{field_path}[{i}]' must be of type {item_rule.__name__}")
-                elif isinstance(item_rule, dict):
-                    # Complex item validation
-                    if item_rule.get("type") == dict and "schema" in item_rule:
-                        # Nested object in list
-                        nested_schema = Schema(item_rule["schema"])
-                        try:
-                            nested_schema.validate(item, f"{field_path}[{i}]")
-                        except ValidationError as e:
-                            violations.extend(e.violations)
-                    else:
-                        # Other complex validations for list items
-                        violations.extend(self._validate_field(item, item_rule, f"{field_path}[{i}]"))
-
-        # Nested object validation
-        if rule.get("type") == dict and "schema" in rule and isinstance(value, dict):
-            nested_schema = Schema(rule["schema"])
-            try:
-                nested_schema.validate(value, field_path)
-            except ValidationError as e:
-                violations.extend(e.violations)
-
-        # Custom validation function
-        if "validator" in rule and value is not None:
-            try:
-                if not rule["validator"](value):
-                    violations.append(f"Field '{field_path}' failed custom validation")
-            except Exception as e:
-                violations.append(f"Field '{field_path}' validation error: {str(e)}")
-
-        return violations
 
     def __repr__(self) -> str:
         return f"<Schema rules={self.schema}>"
@@ -203,3 +126,37 @@ def check_input(schema: Schema, source: str = "json", sample_rate: float = 1.0) 
             return func(*args, **kwargs)
         return wrapper
     return decorator
+
+
+# Example usage
+if __name__ == "__main__":
+    # Define a schema
+    user_schema = Schema({
+        "id": int,
+        "email": {"type": str, "regex": r".+@.+\..+"},
+        "age": {"type": int, "nullable": True, "min": 0},
+    })
+
+    @check_input(schema=user_schema, source="json", sample_rate=1.0)
+    def create_user(request):
+        data = request.json
+        print(f"User created with data: {data}")
+
+    # Mock request object for testing
+    class MockRequest:
+        def __init__(self, json):
+            self.json = json
+
+    # Test valid data
+    valid_request = MockRequest({"id": 1, "email": "test@example.com", "age": 25})
+    try:
+        create_user(valid_request)
+    except ValidationError as e:
+        print(f"Validation error: {e}")
+
+    # Test invalid data
+    invalid_request = MockRequest({"id": "abc", "email": "invalid-email", "age": -5})
+    try:
+        create_user(invalid_request)
+    except ValidationError as e:
+        print(f"Validation error: {e}")
