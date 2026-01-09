@@ -23,13 +23,17 @@ jobs:
         pip install build twine
 
     - name: Build package
-      run: python -m build
+      run: |
+        cd py-flowcheck
+        python -m build
 
     - name: Publish to PyPI
       env:
         TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-      run: twine upload dist/*
+      run: |
+        cd py-flowcheck
+        twine upload dist/*
 
     - name: Create GitHub Release
       uses: actions/create-release@v1
@@ -47,7 +51,7 @@ jobs:
           
           ## Installation
           ```bash
-          pip install py-flowcheck==${{ github.ref_name }}
+          pip install pyflowcheck-validation==${{ github.ref_name }}
           ```
         draft: false
         prerelease: false
