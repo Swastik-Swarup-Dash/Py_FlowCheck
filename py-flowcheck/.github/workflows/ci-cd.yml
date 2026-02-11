@@ -2,79 +2,72 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
-  release:
-    types: [ published ]
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+    branches:
+      - main
 
 jobs:
   test:
+    name: Run Tests and Coverage
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.9, 3.11, 3.12]
 
     steps:
-    - uses: actions/checkout@v4
+      # Step 1: Checkout the repository
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
+      # Step 2: Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11  # Use Python 3.11
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        cd ..
-        pip install -r requirements-prod.txt
-        cd py-flowcheck
-        pip install -e .
+      # Step 3: Install dependencies
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-prod.txt
 
-    - name: Run tests
-      run: |
-        pytest tests/ -v --cov=py_flowcheck --cov-report=xml
+      # Step 4: Run tests with pytest
+      - name: Run Tests
+        run: |
+          pytest --cov=src --cov-report=term --cov-report=xml
 
-    - name: Run benchmarks
-      run: python examples/benchmarks.py
+      # Step 5: Upload coverage to Codecov (optional)
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          fail_ci_if_error: true
 
-  build:
-    needs: test
+  lint:
+    name: Lint Code
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
-    
+
     steps:
-    - uses: actions/checkout@v4
+      # Step 1: Checkout the repository
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      # Step 2: Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
 
-    - name: Log in to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      # Step 3: Install linting tools
+      - name: Install Linting Tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+      # Step 4: Run flake8 for linting
+      - name: Run flake8
+        run: flake8 src tests
 
-  deploy-production:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    environment: production
-    
-    steps:
-    - name: Deploy to production
-      run: |
-        echo "Deploying py-flowcheck to production..."
-        echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+      # Step 5: Check code formatting with black
+      - name: Check Code Formatting
+        run: black --check src tests
